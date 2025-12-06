@@ -1,10 +1,22 @@
 """Configuration management for RailSync."""
 
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import Field
+from pydantic import BeforeValidator, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def _coerce_int(v: str | int) -> int:
+    """Coerce string to int for Literal validation."""
+    if isinstance(v, str):
+        return int(v)
+    return v
+
+
+# Type aliases for integer literals that can be loaded from env vars as strings
+Visibility = Annotated[Literal[0, 1, 2, 3], BeforeValidator(_coerce_int)]
+BusinessType = Annotated[Literal[0, 1, 2], BeforeValidator(_coerce_int)]
 
 
 class Settings(BaseSettings):
@@ -49,11 +61,11 @@ class Settings(BaseSettings):
         default=False,
         description="Enable debug logging",
     )
-    railsync_default_visibility: Literal[0, 1, 2, 3] = Field(
+    railsync_default_visibility: Visibility = Field(
         default=0,
         description="Default visibility (0=public, 1=unlisted, 2=followers, 3=private)",
     )
-    railsync_default_business_type: Literal[0, 1, 2] = Field(
+    railsync_default_business_type: BusinessType = Field(
         default=0,
         description="Default business type (0=private, 1=business, 2=commute)",
     )

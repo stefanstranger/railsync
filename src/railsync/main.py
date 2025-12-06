@@ -8,7 +8,6 @@ from typing import Annotated, Optional
 import structlog
 import typer
 from rich.console import Console
-from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
 from railsync import __version__
@@ -28,7 +27,8 @@ app = typer.Typer(
     help="Import NS travel data into Träwelling",
     no_args_is_help=True,
 )
-console = Console()
+# Force UTF-8 output to avoid Windows encoding issues with spinner characters
+console = Console(force_terminal=True, legacy_windows=False)
 
 
 def setup_logging(debug: bool = False) -> None:
@@ -299,23 +299,18 @@ def import_trips(
 
     try:
         # Parse file
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            console=console,
-        ) as progress:
-            progress.add_task("Parsing NS export...", total=None)
+        console.print("Parsing NS export...")
 
+        parser = BusinessParser()
+        df = parser._read_file(file)
+        detected_format = detect_format(df)
+
+        if detected_format == NSExportFormat.BUSINESS:
             parser = BusinessParser()
-            df = parser._read_file(file)
-            detected_format = detect_format(df)
+        else:
+            parser = ConsumerParser()
 
-            if detected_format == NSExportFormat.BUSINESS:
-                parser = BusinessParser()
-            else:
-                parser = ConsumerParser()
-
-            trips = parser.parse(file)
+        trips = parser.parse(file)
 
         console.print(f"Found [green]{len(trips)}[/green] trips")
 
@@ -328,18 +323,13 @@ def import_trips(
             raise typer.Exit(0)
 
         # Create check-ins
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            console=console,
-        ) as progress:
-            task = progress.add_task("Creating check-ins...", total=len(complete_trips))
+        console.print("Creating check-ins...")
 
-            results = []
-            for trip in complete_trips:
-                result = checkin_service.checkin_trip(trip, status_message=message)
-                results.append(result)
-                progress.advance(task)
+        results = []
+        for i, trip in enumerate(complete_trips, 1):
+            console.print(f"  [{i}/{len(complete_trips)}] {trip.departure_station} -> {trip.arrival_station}")
+            result = checkin_service.checkin_trip(trip, status_message=message)
+            results.append(result)
 
         # Show results
         summary = checkin_service.get_summary(results)

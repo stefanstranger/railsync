@@ -103,10 +103,25 @@ class TokenResponse(BaseModel):
 class DepartureInfo(BaseModel):
     """Departure information from station."""
 
+    model_config = ConfigDict(extra="ignore")
+
     tripId: str = Field(..., description="Hafas trip ID")
-    lineName: str = Field(..., description="Line name")
     direction: str = Field(..., description="Direction/destination")
-    plannedDeparture: datetime = Field(..., description="Planned departure time")
-    realDeparture: datetime | None = Field(None, description="Actual departure time")
+    plannedWhen: str | None = Field(None, description="Planned departure time (ISO string)")
+    when: str | None = Field(None, description="Actual departure time (ISO string)")
     platform: str | None = Field(None, description="Platform number")
-    cancelled: bool = Field(False, description="Whether cancelled")
+    line: dict | None = Field(None, description="Line information")
+
+    @property
+    def line_name(self) -> str:
+        """Get line name from nested line object."""
+        if self.line:
+            return self.line.get("name", "")
+        return ""
+
+    @property
+    def planned_departure(self) -> datetime | None:
+        """Parse planned departure time."""
+        if self.plannedWhen:
+            return datetime.fromisoformat(self.plannedWhen.replace("Z", "+00:00"))
+        return None

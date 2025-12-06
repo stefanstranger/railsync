@@ -1,6 +1,6 @@
 """Check-in service for creating Träwelling check-ins from NS trips."""
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import structlog
@@ -134,9 +134,19 @@ class CheckinService:
         best_match: DepartureInfo | None = None
         best_score = 0.0
 
+        # Make departure_time timezone-aware (assume UTC) for comparison
+        if departure_time.tzinfo is None:
+            departure_time_aware = departure_time.replace(tzinfo=timezone.utc)
+        else:
+            departure_time_aware = departure_time
+
         for dep in departures:
             # Check time tolerance
-            time_diff = abs((dep.plannedDeparture - departure_time).total_seconds())
+            planned = dep.planned_departure
+            if not planned:
+                continue
+
+            time_diff = abs((planned - departure_time_aware).total_seconds())
             if time_diff > tolerance.total_seconds():
                 continue
 
@@ -223,7 +233,7 @@ class CheckinService:
         # Build check-in request
         request = CheckinRequest(
             tripId=matching_departure.tripId,
-            lineName=matching_departure.lineName,
+            lineName=matching_departure.line_name,
             start=departure_station.id,
             destination=arrival_station.id,
             departure=trip.check_in_time,
@@ -239,7 +249,7 @@ class CheckinService:
             departure=trip.departure_station,
             arrival=trip.arrival_station,
             time=trip.check_in_time.strftime("%Y-%m-%d %H:%M"),
-            line=matching_departure.lineName,
+            line=matching_departure.line_name,
             dry_run=self.dry_run,
         )
 

@@ -257,7 +257,7 @@ class TraewellingClient:
         Returns:
             User information.
         """
-        data = self._request("GET", "/user")
+        data = self._request("GET", "/auth/user")
         return UserInfo(**data["data"])
 
     # ==================== Stations ====================
@@ -266,24 +266,34 @@ class TraewellingClient:
         self,
         latitude: float,
         longitude: float,
+        radius: float = 0.01,
     ) -> TraewellingStation | None:
-        """Search for station by coordinates.
+        """Search for station by coordinates using bounding box.
 
         Args:
             latitude: Latitude.
             longitude: Longitude.
+            radius: Bounding box radius in degrees (default ~1km).
 
         Returns:
             Nearest station or None.
         """
         try:
+            # Use bounding box parameters as required by the API
             data = self._request(
                 "GET",
                 "/station",
-                params={"latitude": latitude, "longitude": longitude},
+                params={
+                    "min_lat": latitude - radius,
+                    "max_lat": latitude + radius,
+                    "min_lon": longitude - radius,
+                    "max_lon": longitude + radius,
+                },
             )
-            if data.get("data"):
-                return TraewellingStation(**data["data"])
+            stations = data.get("data", [])
+            if stations:
+                # Return the first/closest station
+                return TraewellingStation(**stations[0])
             return None
         except TraewellingAPIError as e:
             logger.warning("Station search failed", error=str(e))
@@ -298,7 +308,7 @@ class TraewellingClient:
         Returns:
             List of matching stations.
         """
-        data = self._request("GET", f"/station/autocomplete/{query}")
+        data = self._request("GET", f"/trains/station/autocomplete/{query}")
         return [TraewellingStation(**s) for s in data.get("data", [])]
 
     def get_departures(

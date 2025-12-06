@@ -204,7 +204,7 @@ class StationMapper:
 
         Args:
             name: Station name from NS export.
-            use_coordinates: Whether to use coordinate-based lookup.
+            use_coordinates: Whether to use coordinate-based lookup as fallback.
 
         Returns:
             Matching TraewellingStation or None.
@@ -215,24 +215,31 @@ class StationMapper:
         if cache_key in self._traewelling_cache:
             return self._traewelling_cache[cache_key]
 
-        # Find NS station for coordinates
+        # Find NS station for coordinates (as fallback)
         ns_station = self.find_ns_station(name)
 
         traewelling_station: TraewellingStation | None = None
 
-        # Try coordinate-based lookup first (most reliable)
-        if use_coordinates and ns_station:
+        # Try name-based search FIRST (returns train stations via autocomplete)
+        search_name = ns_station.name if ns_station else name
+        results = self.client.search_station_by_name(search_name)
+        if results:
+            # Prefer exact or close matches
+            for station in results:
+                # Check if station name contains the search term (case-insensitive)
+                if search_name.lower() in station.name.lower():
+                    traewelling_station = station
+                    break
+            # If no close match, take the first result
+            if not traewelling_station:
+                traewelling_station = results[0]
+
+        # Fallback to coordinate-based lookup if name search failed
+        if not traewelling_station and use_coordinates and ns_station:
             traewelling_station = self.client.search_station_by_coordinates(
                 latitude=ns_station.lat,
                 longitude=ns_station.lng,
             )
-
-        # Fallback to name-based search
-        if not traewelling_station:
-            search_name = ns_station.name if ns_station else name
-            results = self.client.search_station_by_name(search_name)
-            if results:
-                traewelling_station = results[0]
 
         # Cache the result
         if traewelling_station:
